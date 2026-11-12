@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# Pytest
+.pytest_cache/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Generated diagrams
+nfa_diagram
+nfa_diagram.svg
+dfa_diagram
+dfa_diagram.svg
+minimized_dfa_diagram
+minimized_dfa_diagram.svg
