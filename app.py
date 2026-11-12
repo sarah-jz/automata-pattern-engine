@@ -1,16 +1,29 @@
-
+from ui.styles import load_css
 import streamlit as st
 
-from core.regex_parser import RegexParser
-from core.nfa import build_nfa
-from core.dfa import convert_nfa_to_dfa
-from core.minimizer import minimize_dfa
+from services.automata_service import build_automata
 from core.recognizer import DFARecognizer
-from core.equivalence import check_equivalence
+
+from services.equivalence_service import compare_expressions
 
 from visualization.automata_graph import (
     create_nfa_graph,
     create_dfa_graph
+)
+
+from services.recognition_service import (
+    recognize_string,
+    recognize_batch
+)
+
+from ui.components import (
+    automata_metrics,
+    section_header,
+    recognition_message,
+    batch_metrics,
+    app_header,
+    pattern_builder,
+    automata_visualization
 )
 
 
@@ -23,55 +36,18 @@ st.set_page_config(
     page_icon="⚙️",
     layout="wide"
 )
-
+load_css()
 
 # --------------------------------------------------
 # AUTOMATA CONSTRUCTION PIPELINE
 # --------------------------------------------------
 
-def build_automata(expression):
-    if not expression or not expression.strip():
-        raise ValueError(
-            "Please enter a regular expression."
-        )
-    parser = RegexParser(expression)
-
-    postfix = parser.to_postfix()
-
-    nfa = build_nfa(postfix)
-
-    dfa = convert_nfa_to_dfa(nfa)
-
-    minimized_dfa = minimize_dfa(dfa)
-
-    return {
-        "postfix": postfix,
-        "nfa": nfa,
-        "dfa": dfa,
-        "minimized_dfa": minimized_dfa
-    }
 
 
 # --------------------------------------------------
 # PAGE HEADER
 # --------------------------------------------------
-
-st.title("Automata Pattern Recognition Engine")
-
-st.markdown(
-    """
-    ### Explore the relationship between regular expressions
-    and finite automata.
-
-    Construct, visualize, minimize and test automata
-    using fundamental algorithms from Automata Theory.
-    """
-)
-
-st.caption(
-    "Python | Streamlit | Graphviz | Finite Automata"
-)
-
+app_header()
 st.divider()
 
 
@@ -79,35 +55,7 @@ st.divider()
 # SIDEBAR - REGULAR EXPRESSION INPUT
 # --------------------------------------------------
 
-st.sidebar.title("Pattern Builder")
-
-st.sidebar.markdown(
-    """
-    Build finite automata from regular expressions.
-
-    **Supported operators**
-
-    - `|` Union
-    - `*` Kleene star
-    - `()` Grouping
-    - Implicit concatenation
-    """
-)
-
-st.sidebar.divider()
-
-expression = st.sidebar.text_input(
-    "Enter a regular expression",
-    value="(a|b)*abb",
-    help="Supported operators: |, *, parentheses and implicit concatenation."
-)
-
-generate_button = st.sidebar.button(
-    "Generate Automata",
-    type="primary",
-    use_container_width=True
-)
-
+expression, generate_button = pattern_builder()
 
 # --------------------------------------------------
 # BUILD AUTOMATA
@@ -163,23 +111,7 @@ if "automata_result" in st.session_state:
     # AUTOMATA STATISTICS
     # ----------------------------------------------
 
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "NFA States",
-        len(nfa.states)
-    )
-
-    col2.metric(
-        "DFA States",
-        len(dfa.states)
-    )
-
-    col3.metric(
-        "Minimized DFA States",
-        len(minimized_dfa.states)
-    )
-
+    automata_metrics(nfa, dfa, minimized_dfa)
     st.divider()
 
     # ----------------------------------------------
@@ -199,11 +131,9 @@ if "automata_result" in st.session_state:
 
     with tab1:
 
-        st.header("Automata Visualization")
-
-        st.write(
-            "Explore the automata generated from your "
-            "regular expression."
+        section_header(
+            "Automata Visualization",
+            "Explore the automata generated from your regular expression."
         )
 
         nfa_tab, dfa_tab, minimized_tab = st.tabs([
@@ -214,42 +144,38 @@ if "automata_result" in st.session_state:
 
         with nfa_tab:
 
-            st.subheader("Epsilon-NFA")
-
-            st.write(
-                f"Total states: {len(nfa.states)}"
-            )
-
             nfa_graph = create_nfa_graph(nfa)
 
-            st.graphviz_chart(nfa_graph.source)
+            automata_visualization(
+                "Epsilon-NFA",
+                "Non-deterministic finite automaton generated using Thompson's Construction.",
+                nfa_graph,
+                len(nfa.states)
+            )
+
 
         with dfa_tab:
 
-            st.subheader("Deterministic Finite Automaton")
-
-            st.write(
-                f"Total states: {len(dfa.states)}"
-            )
-
             dfa_graph = create_dfa_graph(dfa)
 
-            st.graphviz_chart(dfa_graph.source)
-
+            automata_visualization(
+                "Deterministic Finite Automaton",
+                "Deterministic automaton generated using subset construction.",
+                dfa_graph,
+                len(dfa.states)
+            )
+        
         with minimized_tab:
 
-            st.subheader("Minimized DFA")
+            minimized_graph = create_dfa_graph(minimized_dfa)
 
-            st.write(
-                f"Total states: {len(minimized_dfa.states)}"
+            automata_visualization(
+                "Minimized DFA",
+                "Equivalent deterministic automaton with redundant states removed.",
+                minimized_graph,
+                len(minimized_dfa.states)
             )
-
-            minimized_graph = create_dfa_graph(
-                minimized_dfa
-            )
-
-            st.graphviz_chart(minimized_graph.source)
-
+            
     # ==============================================
     # TAB 2 - STRING TESTER
     # ==============================================
@@ -270,21 +196,12 @@ if "automata_result" in st.session_state:
 
         if st.button("Test String"):
 
-            recognizer = DFARecognizer(minimized_dfa)
-
-            recognition_result = recognizer.recognize(
+            recognition_result = recognize_string(
+                minimized_dfa,
                 input_string
             )
 
-            if recognition_result["accepted"]:
-
-                st.success("STRING ACCEPTED")
-
-            else:
-
-                st.error("STRING REJECTED")
-
-            st.write(recognition_result["message"])
+            recognition_message(recognition_result)
 
             st.subheader("Transition Trace")
 
@@ -337,14 +254,12 @@ if "automata_result" in st.session_state:
 
                 try:
 
-                    second_result = build_automata(
+                    result_data = compare_expressions(
+                        minimized_dfa,
                         second_expression
                     )
 
-                    comparison = check_equivalence(
-                        minimized_dfa,
-                        second_result["minimized_dfa"]
-                    )
+                    comparison = result_data["comparison"]
 
                     if comparison["equivalent"]:
 
@@ -408,23 +323,10 @@ if "automata_result" in st.session_state:
 
                 strings = batch_input.splitlines()
 
-                results = []
-
-                for string in strings:
-
-                    recognition = recognizer.recognize(
-                        string
-                    )
-
-                    results.append({
-                        "Input String": repr(string),
-                        "Result": (
-                            "Accepted"
-                            if recognition["accepted"]
-                            else "Rejected"
-                        ),
-                        "Final State": recognition["final_state"]
-                    })
+                results = recognize_batch(
+                    minimized_dfa,
+                    strings
+                )
 
                 st.dataframe(
                     results,
@@ -439,19 +341,7 @@ if "automata_result" in st.session_state:
 
                 rejected_count = len(results) - accepted_count
 
-                col1, col2 = st.columns(2)
-
-                col1.metric(
-                    "Accepted Strings",
-                    accepted_count
-                )
-
-                col2.metric(
-                    "Rejected Strings",
-                    rejected_count
-                )
-
-
+                batch_metrics(results)
 # --------------------------------------------------
 # INITIAL SCREEN
 # --------------------------------------------------
